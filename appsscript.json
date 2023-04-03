@@ -1,4 +1,16 @@
 {
+  "timeZone": "America/New_York",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Calendar",
+        "serviceId": "calendar",
+        "version": "v3"
+      }
+    ]
+  },
   "addOns": {
     "calendar": {
       "eventOpenTrigger": {
@@ -21,16 +33,20 @@
       "name": "Custom Events"
     }
   },
-  "timeZone": "America/New_York",
-  "dependencies": {
-    "enabledAdvancedServices": [
-      {
-        "userSymbol": "Calendar",
-        "version": "v3",
-        "serviceId": "calendar"
-      }
-    ]
-  },
-  "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8"
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar.events.readonly",
+    "https://www.google.com/calendar/feeds",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/calendar.addons.current.event.read",
+    "https://www.googleapis.com/auth/calendar.addons.execute",
+    "https://www.googleapis.com/auth/calendar.addons.current.event.write",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "webapp": {
+    "executeAs": "USER_ACCESSING",
+    "access": "ANYONE"
+  }
 }
