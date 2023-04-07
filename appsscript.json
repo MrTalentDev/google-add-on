@@ -16,9 +16,6 @@
       "eventOpenTrigger": {
         "runFunction": "onCalendarEventOpen"
       },
-      "eventUpdateTrigger": {
-        "runFunction": "onEventUpdate"
-      },
       "homepageTrigger": {
         "runFunction": "onCalendarHomePageOpen",
         "enabled": true
@@ -44,9 +41,5 @@
     "https://www.googleapis.com/auth/calendar.addons.execute",
     "https://www.googleapis.com/auth/calendar.addons.current.event.write",
     "https://www.googleapis.com/auth/userinfo.email"
-  ],
-  "webapp": {
-    "executeAs": "USER_ACCESSING",
-    "access": "ANYONE"
-  }
+  ]
 }

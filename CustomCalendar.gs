@@ -1,41 +1,117 @@
-var calendarName = "Do not delete";
+var majorName = "(Do not delete)";
+var calendarName = Session.getActiveUser().getEmail() + majorName;
 
-/*
- * This function is a function that ommit some letters.
- *
+/* --------------------------- Utilities --------------------------- */
+
+/**
+ * This function is a function that ommit some letters
  */
 
 function omite(text) {
   text = text.replace(/[\n\r]/g, " ");
-  return text.length > 50
-    ? text.slice(0, 25) + " ... " + text.slice(-15)
+  return text.length > 40
+    ? text.slice(0, 20) + " ... " + text.slice(-10)
     : text;
 }
 
-/*
- * This function is a function that find the calendar Id which hidden.
- *
+/**
+ * This function is a function that find the shared people of someone's calendar
  */
 
-function getHiddenCalendarId() {
-  var cals = Calendar.CalendarList.list({
-    showHidden: true,
-    minAccessRole: "owner",
-    fields: "items(id,summary)",
-  }).items;
+function getSharedPeople(calendarId) {
+  // Retrieve the access control list for the specified calendar
+  var acl = Calendar.Acl.list(calendarId).items;
 
-  for (var i = 0; i < cals.length; i++)
-    if (cals[i].summary == calendarName) return cals[i].id;
-  return null;
+  // Extract the email addresses of individuals who have been granted access
+  var sharedPeople = acl.map(function (rule) {
+    return {
+      email: rule.scope.value,
+      role: rule.role,
+    };
+  });
+
+  // Return the email addresses of shared people
+  return sharedPeople;
 }
 
-/*
- * This function is a function that show the special events list in 'Do not delete' calendar.
- * So when we open the right side panel, they can find the event that they register
+/**
+ * Set up calendar sharing for a single user. Refer to
+ * https://developers.google.com/google-apps/calendar/v3/reference/acl/insert.
  *
+ * @param {string} calId   Calendar ID
+ * @param {string} user    Email address to share with
+ * @param {string} role    Optional permissions, default = "reader":
+ *                         "none, "freeBusyReader", "reader", "writer", "owner"
+ *
+ * @returns {aclResource}  See https://developers.google.com/google-apps/calendar/v3/reference/acl#resource
+ */
+
+function shareCalendar(calId, user, role) {
+  role = role || "reader";
+
+  var acl = null;
+
+  // Check whether there is already a rule for this user
+  try {
+    acl = Calendar.Acl.get(calId, "user:" + user);
+  } catch (e) {
+    // no existing acl record for this user - as expected. Carry on.
+    Logger.log(e);
+  }
+
+  var newRule = null;
+
+  if (!acl) {
+    // No existing rule - insert one.
+    acl = {
+      scope: {
+        type: "user",
+        value: user,
+      },
+      role: role,
+    };
+    newRule = Calendar.Acl.insert(acl, calId);
+  } else {
+    if (acl.role !== role) {
+      acl.role = role;
+      newRule = Calendar.Acl.update(acl, calId, acl.id);
+    }
+  }
+
+  return newRule;
+}
+
+/**
+ * This function is a function that find the calendar Id which hidden
+ */
+
+function getMyHiddenCalendarId() {
+  var hiddenCal = [];
+  // Get hiddend calendar list
+  var cals = Calendar.CalendarList.list({
+    showHidden: true,
+    fields: "items(id, summary, accessRole)",
+  }).items;
+
+  // Compare calendar name
+  for (var i = 0; i < cals.length; i++)
+    hiddenCal.push({
+      id: cals[i].id,
+      summary: cals[i].summary,
+      accessRole: cals[i].accessRole,
+    });
+  return hiddenCal;
+}
+
+/* --------------------------- Utilities --------------------------- */
+
+/**
+ * This function is a function that show the special events list in 'Do not delete' calendar
+ * So when we open the right side panel, they can find the event that they register
  */
 
 function onCalendarHomePageOpen() {
+  // Set up trigger for button click event
   var triggers = ScriptApp.getProjectTriggers();
   var addOnName = "onEventUpdate";
   for (var i = 0; i < triggers.length; i++) {
@@ -55,31 +131,63 @@ function onCalendarHomePageOpen() {
       CardService.newCardHeader().setTitle("This is special events list.")
     );
 
-  var calId = getHiddenCalendarId();
-  var calendar =
-    calId !== null
-      ? CalendarApp.getCalendarById(calId)
-      : CalendarApp.createCalendar(calendarName, {
-          summary: "This is special events list.",
-          color: CalendarApp.Color.RED_ORANGE,
-          hidden: true,
-          selected: false,
-          timeZone: CalendarApp.getDefaultCalendar().getTimeZone(),
-        });
+  // Get special events calendar
+  var calIds = getMyHiddenCalendarId();
+  var calendar = null;
+  if (calIds.filter((item) => item.summary === calendarName).length === 0) {
+    calendar = CalendarApp.createCalendar(calendarName, {
+      summary: "This is special events list.",
+      color: CalendarApp.Color.RED_ORANGE,
+      hidden: true,
+      selected: false,
+      timeZone: CalendarApp.getDefaultCalendar().getTimeZone(),
+    });
+    calIds.push({
+      id: calendar.getId(),
+      summary: calendarName,
+      accessRole: "owner",
+    });
+  }
+  var existData = 0;
+  calIds
+    .filter((item) => item.summary.indexOf(majorName) > -1)
+    .map((calId) => {
+      calendar = CalendarApp.getCalendarById(calId.id);
+      calendar.setHidden(true);
 
-  var today = new Date();
-  var specialEvents = calendar.getEventsForDay(today);
-  if (specialEvents.length === 0) {
-    card.addSection(
-      CardService.newCardSection().addWidget(
-        CardService.newTextParagraph().setText("No special events in list.")
-      )
-    );
-  } else {
-    for (var i = 0; i < specialEvents.length; i++) {
-      var description = specialEvents[i].getDescription();
-      card.addSection(
-        CardService.newCardSection()
+      if (calId.summary === calendarName && calId.accessRole === "owner") {
+        // Get shared people for this user's default calendar
+        var sharedPeople = getSharedPeople(
+          CalendarApp.getDefaultCalendar().getId()
+        );
+        for (var i = 0; i < sharedPeople.length; i++) {
+          if (sharedPeople[i].email !== Session.getActiveUser().getEmail()) {
+            shareCalendar(
+              calendar.getId(),
+              sharedPeople[i].email,
+              sharedPeople[i].role
+            );
+          }
+        }
+      }
+
+      var today = new Date();
+      var specialEvents = calendar.getEventsForDay(today);
+      existData += specialEvents.length;
+
+      if (specialEvents.length !== 0)
+        card.addSection(
+          CardService.newCardSection().addWidget(
+            CardService.newTextParagraph().setText(
+              calendar.getName().replace(majorName, "")
+            )
+          )
+        );
+      // Get all special events list (All pecial events are daily events, so we can get all special events as getting daily events list)
+      for (var i = 0; i < specialEvents.length; i++) {
+        var description = specialEvents[i].getDescription();
+        var cardSection = CardService.newCardSection();
+        cardSection
           .addWidget(
             CardService.newTextParagraph().setText(
               specialEvents[i].getTitle() === ""
@@ -89,12 +197,11 @@ function onCalendarHomePageOpen() {
           )
           .addWidget(
             CardService.newTextParagraph().setText(
-              specialEvents[i].getDescription() === ""
-                ? "No Description"
-                : omite(description)
+              description === "" ? "No Description" : omite(description)
             )
-          )
-          .addWidget(
+          );
+        if (calId.accessRole === "owner" || calId.accessRole === "writer")
+          cardSection.addWidget(
             CardService.newButtonSet().addButton(
               CardService.newTextButton()
                 .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
@@ -102,30 +209,41 @@ function onCalendarHomePageOpen() {
                 .setOnClickAction(
                   CardService.newAction()
                     .setFunctionName("editClicked")
-                    .setParameters({ clickedEventId: specialEvents[i].getId() })
+                    .setParameters({
+                      clickedEventId: specialEvents[i].getId(),
+                      clickedCalId: calId.id,
+                    })
                 )
             )
-          )
-      );
-    }
+          );
+        card.addSection(cardSection);
+      }
+    });
+
+  if (!existData) {
+    card.addSection(
+      CardService.newCardSection().addWidget(
+        CardService.newTextParagraph().setText("No special events in list.")
+      )
+    );
+    existData = 0;
   }
+
   card = card.build();
 
   return card;
 }
 
-/*
- * This function is a function called when event button which is located right side clicked.
- * So in that function, we redirect to Google event edition page.
- *
+/**
+ * This function is a function called when event button which is located right side clicked
+ * So in that function, we redirect to Google event edition page
  */
-var clickedEventId = "";
 
 function editClicked(e) {
-  clickedEventId = e.parameters.clickedEventId;
-  var calId = getHiddenCalendarId();
-  if (calId === null) return;
-  var event = CalendarApp.getCalendarById(calId).getEventById(clickedEventId);
+  var clickedEventId = e.parameters.clickedEventId;
+  var clickedCalId = e.parameters.clickedCalId;
+  var event =
+    CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
   var eventUrl =
     "https://calendar.google.com/calendar/r/eventedit?" +
     encodeURI(
@@ -138,7 +256,6 @@ function editClicked(e) {
         "&details=" +
         event.getDescription()
     );
-  Logger.log(eventUrl);
   return CardService.newActionResponseBuilder()
     .setOpenLink(
       CardService.newOpenLink()
@@ -149,49 +266,63 @@ function editClicked(e) {
     .build();
 }
 
-/*
- * This function is a function that delete the special event when user delete the real event.
- *
+/**
+ * This function is a function that delete the special event when user delete the real event
  */
 
 function onEventUpdate(e) {
   var today = new Date(new Date().getTime() - 1 * 60 * 1000).toISOString();
-  var calId = getHiddenCalendarId();
-  if (calId === null) return;
   var event = Calendar.Events.list(CalendarApp.getDefaultCalendar().getId(), {
     fields: "items(id,summary,status)",
     maxResults: 1,
     updatedMin: today,
     orderBy: "updated",
   }).items[0];
-  Logger.log(event.status);
+
+  // If there aren't any update
+  if (event === null || event === undefined) return;
+  var calId = getMyHiddenCalendarId().filter(
+    (item) =>
+      (item.accessRole === "owner" || item.accessRole === "writer") &&
+      item.summary === calendarName
+  );
+  // If special events calendar doesn't exist
+  if (calId.length === 0) return;
   var userEvent = CalendarApp.getDefaultCalendar().getEventById(event.id);
-  var specialEvents = CalendarApp.getCalendarById(calId).getEventsForDay(
+  var specialEvents = CalendarApp.getCalendarById(calId[0].id).getEventsForDay(
     new Date()
   );
   for (var i = 0; i < specialEvents.length; i++) {
     if (specialEvents[i].getTitle() === userEvent.getTitle()) {
-      var allEvents = CalendarApp.getCalendarById(calId).getEventSeriesById(
-        specialEvents[i].getId()
-      );
+      var allEvents = CalendarApp.getCalendarById(
+        calId[0].id
+      ).getEventSeriesById(specialEvents[i].getId());
       allEvents.deleteEventSeries();
     }
   }
 }
 
-/*
- * This function is a function that show the selected event in more detail on right side window.
- *
+/**
+ * This function is a function that show the selected event in more detail on right side window
  */
 
 function onCalendarEventOpen(e) {
   if (e.calendar === undefined) return;
 
-  var event = CalendarApp.getEventById(e.calendar.id);
+  var event = CalendarApp.getCalendarById(e.calendar.calendarId).getEventById(
+    e.calendar.id
+  );
   var cardSection = CardService.newCardSection();
   var newFlag = event === null;
   var ownerFalg =
-    e.calendar.organizer.email === Session.getActiveUser().getEmail();
+    e.calendar.calendarId === CalendarApp.getDefaultCalendar().getId();
+  if (!ownerFalg) {
+    var accessRole = getMyHiddenCalendarId().filter(
+      (item) => item.id === e.calendar.calendarId
+    )[0].accessRole;
+    ownerFalg = accessRole === "writer" || accessRole === "owner";
+  }
+  ownerFalg = ownerFalg && e.calendar.calendarId === e.calendar.organizer.email;
 
   cardSection.addWidget(
     CardService.newTextParagraph().setText(
@@ -218,6 +349,7 @@ function onCalendarEventOpen(e) {
       )
     );
   }
+  // If you are owner for this calendar you can edit this event, you can look the button
   if (ownerFalg && !newFlag) {
     cardSection.addWidget(
       CardService.newButtonSet().addButton(
@@ -240,19 +372,20 @@ function onCalendarEventOpen(e) {
   return card;
 }
 
-/*
- * This function is a function that creates an event to Special events list.
- * If there are calendar named 'Do not delete', it creates only event to that calendar.
- * And if there aren't, it creates a calendar named 'Do not delete'.
- * And users can view that calendar on their calendar setting.
- *
+/**
+ * This function is a function that creates an event to Special events list
+ * If there are calendar named 'Do not delete', it creates only event to that calendar
+ * And if there aren't, it creates a calendar named 'Do not delete'
+ * And users can view that calendar on their calendar setting
  */
 
 function addSpecialEvent(event) {
-  var calId = getHiddenCalendarId();
+  var calId = getMyHiddenCalendarId().filter(
+    (item) => item.summary === calendarName
+  );
   var calendar =
-    calId !== null
-      ? CalendarApp.getCalendarById(calId)
+    calId.length !== 0
+      ? CalendarApp.getCalendarById(calId[0].id)
       : CalendarApp.createCalendar(calendarName, {
           summary: "This is special events list.",
           color: CalendarApp.Color.RED_ORANGE,
