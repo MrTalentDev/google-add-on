@@ -1,4 +1,4 @@
-var majorName = "(Do not delete)";
+var majorName = '(Do not delete)';
 var calendarName = Session.getActiveUser().getEmail() + majorName;
 
 /* --------------------------- Utilities --------------------------- */
@@ -8,10 +8,8 @@ var calendarName = Session.getActiveUser().getEmail() + majorName;
  */
 
 function omite(text) {
-  text = text.replace(/[\n\r]/g, " ");
-  return text.length > 40
-    ? text.slice(0, 20) + " ... " + text.slice(-10)
-    : text;
+  text = text.replace(/[\n\r]/g, ' ');
+  return text.length > 40 ? text.slice(0, 20) + ' ... ' + text.slice(-10) : text
 }
 
 /**
@@ -26,7 +24,7 @@ function getSharedPeople(calendarId) {
   var sharedPeople = acl.map(function (rule) {
     return {
       email: rule.scope.value,
-      role: rule.role,
+      role: rule.role
     };
   });
 
@@ -35,7 +33,7 @@ function getSharedPeople(calendarId) {
 }
 
 /**
- * Set up calendar sharing for a single user. Refer to
+ * Set up calendar sharing for a single user. Refer to 
  * https://developers.google.com/google-apps/calendar/v3/reference/acl/insert.
  *
  * @param {string} calId   Calendar ID
@@ -64,11 +62,11 @@ function shareCalendar(calId, user, role) {
   if (!acl) {
     // No existing rule - insert one.
     acl = {
-      scope: {
-        type: "user",
-        value: user,
+      "scope": {
+        "type": "user",
+        "value": user
       },
-      role: role,
+      "role": role
     };
     newRule = Calendar.Acl.insert(acl, calId);
   } else {
@@ -86,20 +84,16 @@ function shareCalendar(calId, user, role) {
  */
 
 function getMyHiddenCalendarId() {
-  var hiddenCal = [];
+  var hiddenCal = []
   // Get hiddend calendar list
   var cals = Calendar.CalendarList.list({
     showHidden: true,
-    fields: "items(id, summary, accessRole)",
+    fields: 'items(id, summary, accessRole)'
   }).items;
 
   // Compare calendar name
   for (var i = 0; i < cals.length; i++)
-    hiddenCal.push({
-      id: cals[i].id,
-      summary: cals[i].summary,
-      accessRole: cals[i].accessRole,
-    });
+    hiddenCal.push({ id: cals[i].id, summary: cals[i].summary, accessRole: cals[i].accessRole });
   return hiddenCal;
 }
 
@@ -120,111 +114,93 @@ function onCalendarHomePageOpen() {
       ScriptApp.deleteTrigger(trigger);
     }
   }
-  ScriptApp.newTrigger("onEventUpdate")
+  ScriptApp.newTrigger('onEventUpdate')
     .forUserCalendar(Session.getActiveUser().getEmail())
     .onEventUpdated()
     .create();
 
   var card = CardService.newCardBuilder()
-    .setName("Card name")
-    .setHeader(
-      CardService.newCardHeader().setTitle("This is special events list.")
-    );
+    .setName('Card name')
+    .setHeader(CardService.newCardHeader().setTitle('This is special events list.'));
 
   // Get special events calendar
   var calIds = getMyHiddenCalendarId();
   var calendar = null;
-  if (calIds.filter((item) => item.summary === calendarName).length === 0) {
-    calendar = CalendarApp.createCalendar(calendarName, {
-      summary: "This is special events list.",
+  if (calIds.filter(item => item.summary === calendarName).length === 0) {
+    calendar = CalendarApp.createCalendar(
+      calendarName, {
+      summary: 'This is special events list.',
       color: CalendarApp.Color.RED_ORANGE,
       hidden: true,
       selected: false,
-      timeZone: CalendarApp.getDefaultCalendar().getTimeZone(),
+      timeZone: CalendarApp.getDefaultCalendar().getTimeZone()
     });
-    calIds.push({
-      id: calendar.getId(),
-      summary: calendarName,
-      accessRole: "owner",
-    });
+    calIds.push({ id: calendar.getId(), summary: calendarName, accessRole: 'owner' });
   }
   var existData = 0;
-  calIds
-    .filter((item) => item.summary.indexOf(majorName) > -1)
-    .map((calId) => {
-      calendar = CalendarApp.getCalendarById(calId.id);
-      calendar.setHidden(true);
+  calIds.filter(item => item.summary.indexOf(majorName) > -1).map((calId) => {
+    calendar = CalendarApp.getCalendarById(calId.id);
+    calendar.setHidden(true);
 
-      if (calId.summary === calendarName && calId.accessRole === "owner") {
-        // Get shared people for this user's default calendar
-        var sharedPeople = getSharedPeople(
-          CalendarApp.getDefaultCalendar().getId()
-        );
-        for (var i = 0; i < sharedPeople.length; i++) {
-          if (sharedPeople[i].email !== Session.getActiveUser().getEmail()) {
-            shareCalendar(
-              calendar.getId(),
-              sharedPeople[i].email,
-              sharedPeople[i].role
-            );
-          }
+    if (calId.summary === calendarName && calId.accessRole === 'owner') {
+      // Get shared people for this user's default calendar
+      var sharedPeople = getSharedPeople(CalendarApp.getDefaultCalendar().getId());
+      for (var i = 0; i < sharedPeople.length; i++) {
+        if (sharedPeople[i].email !== Session.getActiveUser().getEmail()) {
+          shareCalendar(calendar.getId(), sharedPeople[i].email, sharedPeople[i].role);
         }
       }
+    }
 
-      var today = new Date();
-      var specialEvents = calendar.getEventsForDay(today);
-      existData += specialEvents.length;
+    var today = new Date();
+    var specialEvents = calendar.getEventsForDay(today);
+    existData += specialEvents.length;
 
-      if (specialEvents.length !== 0)
-        card.addSection(
-          CardService.newCardSection().addWidget(
-            CardService.newTextParagraph().setText(
-              calendar.getName().replace(majorName, "")
-            )
+    if (specialEvents.length !== 0)
+      card.addSection(
+        CardService.newCardSection().addWidget(
+          CardService.newTextParagraph().setText(
+            calendar.getName().replace(majorName, '')
           )
+        )
+      );
+    // Get all special events list (All pecial events are daily events, so we can get all special events as getting daily events list)
+    for (var i = 0; i < specialEvents.length; i++) {
+      var description = specialEvents[i].getDescription();
+      var cardSection = CardService.newCardSection();
+      cardSection
+        .addWidget(
+          CardService.newTextParagraph().setText(specialEvents[i].getTitle() === '' ? 'No Title' : specialEvents[i].getTitle())
+        )
+        .addWidget(
+          CardService.newTextParagraph().setText(description === '' ? 'No Description' : omite(description))
         );
-      // Get all special events list (All pecial events are daily events, so we can get all special events as getting daily events list)
-      for (var i = 0; i < specialEvents.length; i++) {
-        var description = specialEvents[i].getDescription();
-        var cardSection = CardService.newCardSection();
+      if (calId.accessRole === 'owner' || calId.accessRole === 'writer')
         cardSection
           .addWidget(
-            CardService.newTextParagraph().setText(
-              specialEvents[i].getTitle() === ""
-                ? "No Title"
-                : specialEvents[i].getTitle()
-            )
-          )
-          .addWidget(
-            CardService.newTextParagraph().setText(
-              description === "" ? "No Description" : omite(description)
-            )
+            CardService.newButtonSet()
+              .addButton(
+                CardService
+                  .newTextButton()
+                  .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+                  .setText('Edit')
+                  .setOnClickAction(
+                    CardService.newAction()
+                      .setFunctionName('editClicked')
+                      .setParameters({ 'clickedEventId': specialEvents[i].getId(), 'clickedCalId': calId.id })
+                  )
+              )
           );
-        if (calId.accessRole === "owner" || calId.accessRole === "writer")
-          cardSection.addWidget(
-            CardService.newButtonSet().addButton(
-              CardService.newTextButton()
-                .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-                .setText("Edit")
-                .setOnClickAction(
-                  CardService.newAction()
-                    .setFunctionName("editClicked")
-                    .setParameters({
-                      clickedEventId: specialEvents[i].getId(),
-                      clickedCalId: calId.id,
-                    })
-                )
-            )
-          );
-        card.addSection(cardSection);
-      }
-    });
+      card.addSection(cardSection);
+    }
+  });
 
   if (!existData) {
     card.addSection(
-      CardService.newCardSection().addWidget(
-        CardService.newTextParagraph().setText("No special events in list.")
-      )
+      CardService.newCardSection()
+        .addWidget(
+          CardService.newTextParagraph().setText('No special events in list.')
+        )
     );
     existData = 0;
   }
@@ -242,28 +218,18 @@ function onCalendarHomePageOpen() {
 function editClicked(e) {
   var clickedEventId = e.parameters.clickedEventId;
   var clickedCalId = e.parameters.clickedCalId;
-  var event =
-    CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
-  var eventUrl =
-    "https://calendar.google.com/calendar/r/eventedit?" +
+  var event = CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
+  var eventUrl = 'https://calendar.google.com/calendar/r/eventedit?' +
     encodeURI(
-      "text=" +
-        event.getTitle() +
-        "&dates=" +
-        new Date().toLocaleString() +
-        "/" +
-        new Date(new Date().getTime() + 30 * 60 * 1000).toLocaleString() +
-        "&details=" +
-        event.getDescription()
-    );
-  return CardService.newActionResponseBuilder()
-    .setOpenLink(
-      CardService.newOpenLink()
-        .setUrl(eventUrl)
-        .setOpenAs(CardService.OpenAs.FULL_SIZE)
-        .setOnClose(CardService.OnClose.RELOAD)
-    )
-    .build();
+      'text=' + event.getTitle() +
+      '&dates=' + new Date().toLocaleString() + '/' + new Date(new Date().getTime() + 30 * 60 * 1000).toLocaleString() +
+      '&details=' + event.getDescription());
+  return CardService.newActionResponseBuilder().setOpenLink(
+    CardService.newOpenLink()
+      .setUrl(eventUrl)
+      .setOpenAs(CardService.OpenAs.FULL_SIZE)
+      .setOnClose(CardService.OnClose.RELOAD)
+  ).build();
 }
 
 /**
@@ -276,27 +242,19 @@ function onEventUpdate(e) {
     fields: "items(id,summary,status)",
     maxResults: 1,
     updatedMin: today,
-    orderBy: "updated",
+    orderBy: 'updated'
   }).items[0];
 
   // If there aren't any update
   if (event === null || event === undefined) return;
-  var calId = getMyHiddenCalendarId().filter(
-    (item) =>
-      (item.accessRole === "owner" || item.accessRole === "writer") &&
-      item.summary === calendarName
-  );
+  var calId = getMyHiddenCalendarId().filter(item => (item.accessRole === 'owner' || item.accessRole === 'writer') && item.summary === calendarName);
   // If special events calendar doesn't exist
   if (calId.length === 0) return;
   var userEvent = CalendarApp.getDefaultCalendar().getEventById(event.id);
-  var specialEvents = CalendarApp.getCalendarById(calId[0].id).getEventsForDay(
-    new Date()
-  );
+  var specialEvents = CalendarApp.getCalendarById(calId[0].id).getEventsForDay(new Date());
   for (var i = 0; i < specialEvents.length; i++) {
     if (specialEvents[i].getTitle() === userEvent.getTitle()) {
-      var allEvents = CalendarApp.getCalendarById(
-        calId[0].id
-      ).getEventSeriesById(specialEvents[i].getId());
+      var allEvents = CalendarApp.getCalendarById(calId[0].id).getEventSeriesById(specialEvents[i].getId());
       allEvents.deleteEventSeries();
     }
   }
@@ -309,44 +267,34 @@ function onEventUpdate(e) {
 function onCalendarEventOpen(e) {
   if (e.calendar === undefined) return;
 
-  var event = CalendarApp.getCalendarById(e.calendar.calendarId).getEventById(
-    e.calendar.id
-  );
+  var event = CalendarApp.getCalendarById(e.calendar.calendarId).getEventById(e.calendar.id);
   var cardSection = CardService.newCardSection();
   var newFlag = event === null;
-  var ownerFalg =
-    e.calendar.calendarId === CalendarApp.getDefaultCalendar().getId();
+  var ownerFalg = e.calendar.calendarId === CalendarApp.getDefaultCalendar().getId();
   if (!ownerFalg) {
-    var accessRole = getMyHiddenCalendarId().filter(
-      (item) => item.id === e.calendar.calendarId
-    )[0].accessRole;
-    ownerFalg = accessRole === "writer" || accessRole === "owner";
+    var accessRole = getMyHiddenCalendarId().filter(item => item.id === e.calendar.calendarId)[0].accessRole;
+    ownerFalg = accessRole === 'writer' || accessRole === 'owner';
   }
   ownerFalg = ownerFalg && e.calendar.calendarId === e.calendar.organizer.email;
 
   cardSection.addWidget(
-    CardService.newTextParagraph().setText(
-      newFlag
-        ? "Add to speical events list"
-        : event.getTitle() === ""
-        ? "No Title"
-        : event.getTitle()
-    )
-  );
+    CardService
+      .newTextParagraph()
+      .setText(newFlag ?
+        'Add to speical events list'
+        :
+        event.getTitle() === '' ? 'No Title' : event.getTitle()));
   cardSection.addWidget(
-    CardService.newTextParagraph().setText(
-      newFlag
-        ? "You can add new event after save event."
-        : event.getDescription() === ""
-        ? "No description"
-        : omite(event.getDescription())
-    )
-  );
+    CardService
+      .newTextParagraph()
+      .setText(newFlag ?
+        'You can add new event after save event.'
+        :
+        event.getDescription() === '' ? 'No description' : omite(event.getDescription())));
   if (!newFlag) {
     cardSection.addWidget(
-      CardService.newTextParagraph().setText(
-        event.getStartTime() + " ~ " + event.getEndTime()
-      )
+      CardService.newTextParagraph()
+        .setText(event.getStartTime() + ' ~ ' + event.getEndTime())
     );
   }
   // If you are owner for this calendar you can edit this event, you can look the button
@@ -354,18 +302,19 @@ function onCalendarEventOpen(e) {
     cardSection.addWidget(
       CardService.newButtonSet().addButton(
         CardService.newTextButton()
-          .setText("Add event")
+          .setText('Add event')
           .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
           .setOnClickAction(
-            CardService.newAction().setFunctionName("addSpecialEvent")
+            CardService.newAction()
+              .setFunctionName('addSpecialEvent')
           )
       )
     );
   }
 
   var card = CardService.newCardBuilder()
-    .setName("Card name")
-    .setHeader(CardService.newCardHeader().setTitle("Calendar Event Create"))
+    .setName('Card name')
+    .setHeader(CardService.newCardHeader().setTitle('Calendar Event Create'))
     .addSection(cardSection)
     .build();
 
@@ -380,23 +329,18 @@ function onCalendarEventOpen(e) {
  */
 
 function addSpecialEvent(event) {
-  var calId = getMyHiddenCalendarId().filter(
-    (item) => item.summary === calendarName
-  );
-  var calendar =
-    calId.length !== 0
-      ? CalendarApp.getCalendarById(calId[0].id)
-      : CalendarApp.createCalendar(calendarName, {
-          summary: "This is special events list.",
-          color: CalendarApp.Color.RED_ORANGE,
-          hidden: true,
-          selected: false,
-          timeZone: CalendarApp.getDefaultCalendar().getTimeZone(),
-        });
+  var calId = getMyHiddenCalendarId().filter(item => item.summary === calendarName);
+  var calendar = calId.length !== 0 ? CalendarApp.getCalendarById(calId[0].id) :
+    CalendarApp.createCalendar(
+      calendarName, {
+      summary: 'This is special events list.',
+      color: CalendarApp.Color.RED_ORANGE,
+      hidden: true,
+      selected: false,
+      timeZone: CalendarApp.getDefaultCalendar().getTimeZone()
+    });
 
-  var userEvent = CalendarApp.getDefaultCalendar().getEventById(
-    event.calendar.id
-  );
+  var userEvent = CalendarApp.getDefaultCalendar().getEventById(event.calendar.id);
   var currentTime = new Date();
   var title = userEvent.getTitle();
   var description = userEvent.getDescription();
