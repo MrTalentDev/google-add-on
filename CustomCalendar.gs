@@ -18,7 +18,7 @@ function omite(text) {
 
 function getSharedPeople(calendarId) {
   // Retrieve the access control list for the specified calendar
-  var acl = Calendar.Acl.list(calendarId).items;
+  var acl = Calendar.Acl.list(calendarId).items.filter(item => item.scope.type === 'user');
 
   // Extract the email addresses of individuals who have been granted access
   var sharedPeople = acl.map(function (rule) {
