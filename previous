@@ -1,0 +1,21 @@
+/*var clickedEventId = PropertiesService.getUserProperties().getProperty('clickedEventId');
+    var today = new Date(new Date().getTime() - 1 * 60 * 1000).toISOString();
+    var event = Calendar.Events.list(CalendarApp.getDefaultCalendar().getId(), {
+      fields: 'items(id,summary,status)',
+      maxResults: 1,
+      updatedMin: today,
+      orderBy: 'updated'
+    }).items[0];
+
+    // If there aren't any update
+    if (event === null || event === undefined) return;
+    var calId = getMyHiddenCalendarId().filter(item => (item.accessRole === 'owner' || item.accessRole === 'writer') && item.summary === calendarName);
+    // If special events calendar doesn't exist
+    if (calId.length === 0) return;
+    var specialEvents = CalendarApp.getCalendarById(calId[0].id).getEventsForDay(new Date());
+    for (var i = 0; i < specialEvents.length; i++) {
+      if (clickedEventId !== '' && specialEvents[i].getId() === clickedEventId) {
+        var allEvents = CalendarApp.getCalendarById(calId[0].id).getEventSeriesById(specialEvents[i].getId());
+        allEvents.deleteEventSeries();
+      }
+    }*/

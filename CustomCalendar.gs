@@ -38,20 +38,20 @@ function getSharedPeople(calendarId) {
  *
  * @param {string} calId   Calendar ID
  * @param {string} user    Email address to share with
- * @param {string} role    Optional permissions, default = "reader":
- *                         "none, "freeBusyReader", "reader", "writer", "owner"
+ * @param {string} role    Optional permissions, default = 'reader':
+ *                         'none, 'freeBusyReader', 'reader', 'writer', 'owner'
  *
  * @returns {aclResource}  See https://developers.google.com/google-apps/calendar/v3/reference/acl#resource
  */
 
 function shareCalendar(calId, user, role) {
-  role = role || "reader";
+  role = role || 'reader';
 
   var acl = null;
 
   // Check whether there is already a rule for this user
   try {
-    acl = Calendar.Acl.get(calId, "user:" + user);
+    acl = Calendar.Acl.get(calId, 'user:' + user);
   } catch (e) {
     // no existing acl record for this user - as expected. Carry on.
     Logger.log(e);
@@ -62,11 +62,11 @@ function shareCalendar(calId, user, role) {
   if (!acl) {
     // No existing rule - insert one.
     acl = {
-      "scope": {
-        "type": "user",
-        "value": user
+      'scope': {
+        'type': 'user',
+        'value': user
       },
-      "role": role
+      'role': role
     };
     newRule = Calendar.Acl.insert(acl, calId);
   } else {
@@ -94,7 +94,6 @@ function getMyHiddenCalendarId() {
   // Compare calendar name
   for (var i = 0; i < cals.length; i++)
     hiddenCal.push({ id: cals[i].id, summary: cals[i].summary, accessRole: cals[i].accessRole });
-  Logger.log(hiddenCal);
   return hiddenCal;
 }
 
@@ -108,20 +107,16 @@ function getMyHiddenCalendarId() {
 function onCalendarHomePageOpen() {
   // Set up trigger for button click event
   var triggers = ScriptApp.getProjectTriggers();
-  var addOnName = "onEventUpdate";
+  var addOnName = 'onEventUpdate';
   for (var i = 0; i < triggers.length; i++) {
     var trigger = triggers[i];
     if (trigger.getHandlerFunction().indexOf(addOnName) !== -1) {
       ScriptApp.deleteTrigger(trigger);
     }
   }
-  ScriptApp.newTrigger('onEventUpdate')
-    .forUserCalendar(Session.getActiveUser().getEmail())
-    .onEventUpdated()
-    .create();
 
   // Initializing store value
-  PropertiesService.getUserProperties().setProperty('clickedEventId', '');
+  PropertiesService.getUserProperties().setProperty('clickedCalId', '');
 
   var card = CardService.newCardBuilder()
     .setName('MainCard')
@@ -137,7 +132,7 @@ function onCalendarHomePageOpen() {
       color: CalendarApp.Color.RED_ORANGE,
       hidden: true,
       selected: false,
-      timeZone: CalendarApp.getDefaultCalendar().getTimeZone()
+      timeZone: 'America/New_York'
     });
     calIds.push({ id: calendar.getId(), summary: calendarName, accessRole: 'owner' });
   }
@@ -179,7 +174,15 @@ function onCalendarHomePageOpen() {
         .addWidget(
           CardService.newTextParagraph().setText(description === '' ? 'No Description' : omite(description))
         );
-      if (calId.accessRole === 'owner' || calId.accessRole === 'writer')
+      if (calId.accessRole === 'owner' || calId.accessRole === 'writer') {
+        try {
+          ScriptApp.newTrigger(addOnName)
+            .forUserCalendar(calId.id)
+            .onEventUpdated()
+            .create();
+        } catch (e) {
+          Logger.log(e);
+        }
         cardSection
           .addWidget(
             CardService.newButtonSet()
@@ -194,7 +197,19 @@ function onCalendarHomePageOpen() {
                       .setParameters({ 'clickedEventId': specialEvents[i].getId(), 'clickedCalId': calId.id })
                   )
               )
+              .addButton(
+                CardService
+                  .newTextButton()
+                  .setTextButtonStyle(CardService.TextButtonStyle.TEXT)
+                  .setText('Restore')
+                  .setOnClickAction(
+                    CardService.newAction()
+                      .setFunctionName('restoreClicked')
+                      .setParameters({ 'clickedEventId': specialEvents[i].getId(), 'clickedCalId': calId.id })
+                  )
+              )
           );
+      }
       card.addSection(cardSection);
     }
   });
@@ -221,28 +236,83 @@ function onCalendarHomePageOpen() {
 
 function editClicked(e) {
   try {
-    if (PropertiesService.getUserProperties().getProperty('clickedEventId') !== '') {
+    if (PropertiesService.getUserProperties().getProperty('clickedCalId') !== '') {
       var notification = CardService.newNotification()
-        .setText("Close other editing tab.");
+        .setText('Close other editing window.');
       return CardService.newActionResponseBuilder()
         .setNotification(notification)
         .build();
     }
     var clickedEventId = e.parameters.clickedEventId;
     var clickedCalId = e.parameters.clickedCalId;
-    var event = CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
-    var eventUrl = 'https://calendar.google.com/calendar/r/eventedit?' +
-      encodeURI(
-        'text=' + event.getTitle() +
-        '&dates=' + new Date().toLocaleString() + '/' + new Date(new Date().getTime() + 30 * 60 * 1000).toLocaleString() +
-        '&details=' + event.getDescription());
-    PropertiesService.getUserProperties().setProperty('clickedEventId', clickedEventId);
+    const event = CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
+    var eventUrl = 'https://calendar.google.com/calendar/r/eventedit/' +
+      Utilities.base64Encode(
+        event.getId().split('@')[0] + '_' + event.getStartTime().toISOString().replace(/[^0-9,^T]/g, "").slice(0, -3) + "Z" +
+        " " +
+        event.getOriginalCalendarId()
+      ).replace(/\=/g, '');
+    // encodeURI(
+    //   'text=' + event.getTitle() +
+    //   '&dates=' + new Date().toLocaleString() + '/' + new Date(new Date().getTime() + 30 * 60 * 1000).toLocaleString() +
+    //   '&src=' + event.getOriginalCalendarId() +
+    //   '&details=' + event.getDescription());
+    PropertiesService.getUserProperties().setProperty('clickedCalId', clickedCalId);
     return CardService.newActionResponseBuilder().setOpenLink(
       CardService.newOpenLink()
         .setUrl(eventUrl)
-        .setOpenAs(CardService.OpenAs.FULL_SIZE)
+        .setOpenAs(CardService.OpenAs.OVERLAY)
         .setOnClose(CardService.OnClose.RELOAD)
     ).build();
+  } catch (e) {
+    Logger.log(e);
+  }
+}
+
+/**
+ * This function is a function called when restore button which is located right side clicked
+ * So in that function, we restore the event with it's data
+ */
+
+function restoreClicked(e) {
+  try {
+    var clickedCalId = e.parameters.clickedCalId;
+    var calendar = CalendarApp.getCalendarById(clickedCalId);
+
+    var clickedEventId = e.parameters.clickedEventId;
+    var userEvent = calendar.getEventById(clickedEventId);
+    var allEvents = calendar.getEventSeriesById(clickedEventId);
+
+    var calendarId = PropertiesService.getUserProperties().getProperty(userEvent.getId());
+
+    var diffTime = userEvent.getEndTime() - userEvent.getStartTime();
+
+    var startTime = userEvent.getStartTime();
+    startTime = new Date(
+      new Date(
+        new Date().setHours(startTime.getHours())
+      ).setMinutes(startTime.getMinutes())
+    ).setSeconds(startTime.getSeconds());
+
+    var endTime = startTime + diffTime;
+
+    CalendarApp.getCalendarById(calendarId).createEvent(
+      userEvent.getTitle(),
+      new Date(startTime),
+      new Date(endTime),
+      { description: userEvent.getDescription(), location: userEvent.getLocation() }
+    );
+
+    allEvents.deleteEventSeries();
+    PropertiesService.getUserProperties().deleteProperty(userEvent.getId());
+
+    var notification = CardService.newNotification()
+      .setText(`Event restored to <b>` + CalendarApp.getCalendarById(calendarId).getName() + `</b> calendar.`);
+    return CardService.newActionResponseBuilder()
+      .setStateChanged(true)
+      .setNavigation(CardService.newNavigation().updateCard(onCalendarHomePageOpen()))
+      .setNotification(notification)
+      .build();
   } catch (e) {
     Logger.log(e);
   }
@@ -254,28 +324,48 @@ function editClicked(e) {
 
 function onEventUpdate(e) {
   try {
-    var clickedEventId = PropertiesService.getUserProperties().getProperty('clickedEventId');
     var today = new Date(new Date().getTime() - 1 * 60 * 1000).toISOString();
-    var event = Calendar.Events.list(CalendarApp.getDefaultCalendar().getId(), {
-      fields: "items(id,summary,status)",
+    var clickedCalId = PropertiesService.getUserProperties().getProperty('clickedCalId');
+    var event = Calendar.Events.list(CalendarApp.getCalendarById(clickedCalId).getId(), {
+      fields: 'items(id,summary,status)',
       maxResults: 1,
       updatedMin: today,
       orderBy: 'updated'
     }).items[0];
+    var clickedCalendar = CalendarApp.getCalendarById(clickedCalId);
 
     // If there aren't any update
     if (event === null || event === undefined) return;
-    var calId = getMyHiddenCalendarId().filter(item => (item.accessRole === 'owner' || item.accessRole === 'writer') && item.summary === calendarName);
-    // If special events calendar doesn't exist
-    if (calId.length === 0) return;
-    var specialEvents = CalendarApp.getCalendarById(calId[0].id).getEventsForDay(new Date());
-    for (var i = 0; i < specialEvents.length; i++) {
-      if (clickedEventId !== '' && specialEvents[i].getId() === clickedEventId) {
-        var allEvents = CalendarApp.getCalendarById(calId[0].id).getEventSeriesById(specialEvents[i].getId());
-        allEvents.deleteEventSeries();
-      }
-    }
-    PropertiesService.getUserProperties().setProperty('clickedEventId', '');
+
+    var userEvent = clickedCalendar.getEventById(event.id);
+    var diffTime = userEvent.getEndTime() - userEvent.getStartTime();
+    var startTime = userEvent.getStartTime();
+
+    var calendarId = PropertiesService.getUserProperties().getProperty(userEvent.getId());
+    PropertiesService.getUserProperties().deleteProperty(userEvent.getId());
+
+    startTime = new Date(
+      new Date(
+        new Date().setHours(startTime.getHours())
+      ).setMinutes(startTime.getMinutes())
+    ).setSeconds(startTime.getSeconds());
+
+    var endTime = startTime + diffTime;
+
+    var intervalVal = Math.floor(diffTime / (3600 * 24 * 1000));
+
+    clickedCalendar.getEventSeriesById(event.id).deleteEventSeries();
+    var newEvents = clickedCalendar.createEventSeries(
+      userEvent.getTitle(),
+      new Date(startTime),
+      new Date(endTime),
+      CalendarApp.newRecurrence().addDailyRule().interval(intervalVal === 0 ? 1 : intervalVal),
+      { description: userEvent.getDescription(), location: userEvent.getLocation() }
+    );
+
+    PropertiesService.getUserProperties().setProperty(newEvents.getId(), calendarId);
+
+    PropertiesService.getUserProperties().setProperty('clickedCalId', '');
   } catch (e) {
     Logger.log(e);
   }
@@ -363,24 +453,38 @@ function addSpecialEvent(event) {
         color: CalendarApp.Color.RED_ORANGE,
         hidden: true,
         selected: false,
-        timeZone: CalendarApp.getDefaultCalendar().getTimeZone()
+        timeZone: 'America/New_York'
       });
 
-    var userEvent = CalendarApp.getDefaultCalendar().getEventById(event.calendar.id);
-    var currentTime = new Date();
-    var title = userEvent.getTitle();
-    var description = userEvent.getDescription();
+    var userEvent = CalendarApp.getCalendarById(event.calendar.calendarId).getEventById(event.calendar.id);
 
-    calendar.createEventSeries(
-      title,
-      currentTime,
-      currentTime,
-      CalendarApp.newRecurrence().addDailyRule(),
-      { description }
+    var diffTime = userEvent.getEndTime() - userEvent.getStartTime();
+
+    var startTime = userEvent.getStartTime();
+
+    startTime = new Date(
+      new Date(
+        new Date().setHours(startTime.getHours())
+      ).setMinutes(startTime.getMinutes())
+    ).setSeconds(startTime.getSeconds());
+
+    var endTime = startTime + diffTime;
+
+    var intervalVal = Math.floor(diffTime / (3600 * 24 * 1000));
+
+    var newEvents = calendar.createEventSeries(
+      userEvent.getTitle(),
+      new Date(startTime),
+      new Date(endTime),
+      CalendarApp.newRecurrence().addDailyRule().interval(intervalVal === 0 ? 1 : intervalVal),
+      { description: userEvent.getDescription(), location: userEvent.getLocation() }
     );
+
+    PropertiesService.getUserProperties().setProperty(newEvents.getId(), event.calendar.calendarId);
+
     userEvent.deleteEvent();
     var notification = CardService.newNotification()
-      .setText("Event added in rescheduling event list.");
+      .setText('Event added in rescheduling event list.');
     return CardService.newActionResponseBuilder()
       .setStateChanged(true)
       .setNavigation(CardService.newNavigation().updateCard(onCalendarHomePageOpen()))
