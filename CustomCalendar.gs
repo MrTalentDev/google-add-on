@@ -34,7 +34,7 @@ function getSharedPeople(calendarId) {
 
 /**
  * Set up calendar sharing for a single user. Refer to 
- * https://developers.google.com/google-apps/calendar/v3/reference/acl/insert.
+ * https://developers.google.com/google-apps/calendar/v3/reference/acl/insert
  *
  * @param {string} calId   Calendar ID
  * @param {string} user    Email address to share with
@@ -54,6 +54,7 @@ function shareCalendar(calId, user, role) {
     acl = Calendar.Acl.get(calId, 'user:' + user);
   } catch (e) {
     // no existing acl record for this user - as expected. Carry on.
+    Logger.log("shareCalendar");
     Logger.log(e);
   }
 
@@ -181,6 +182,7 @@ function onCalendarHomePageOpen() {
             .onEventUpdated()
             .create();
         } catch (e) {
+          Logger.log("Get all special events");
           Logger.log(e);
         }
         cardSection
@@ -245,10 +247,11 @@ function editClicked(e) {
     }
     var clickedEventId = e.parameters.clickedEventId;
     var clickedCalId = e.parameters.clickedCalId;
-    const event = CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
+    var event = CalendarApp.getCalendarById(clickedCalId).getEventById(clickedEventId);
     var eventUrl = 'https://calendar.google.com/calendar/r/eventedit/' +
       Utilities.base64Encode(
-        event.getId().split('@')[0] + '_' + event.getStartTime().toISOString().replace(/[^0-9,^T]/g, "").slice(0, -3) + "Z" +
+        event.getId().split('@')[0] + '_' +
+        (new Date(event.getStartTime().setDate(new Date().getDate()))).toISOString().replace(/[^0-9,^T]/g, "").slice(0, -3) + "Z" +
         " " +
         event.getOriginalCalendarId()
       ).replace(/\=/g, '');
@@ -265,6 +268,7 @@ function editClicked(e) {
         .setOnClose(CardService.OnClose.RELOAD)
     ).build();
   } catch (e) {
+    Logger.log("editClicked");
     Logger.log(e);
   }
 }
@@ -314,6 +318,7 @@ function restoreClicked(e) {
       .setNotification(notification)
       .build();
   } catch (e) {
+    Logger.log("restoreClicked");
     Logger.log(e);
   }
 }
@@ -326,16 +331,20 @@ function onEventUpdate(e) {
   try {
     var today = new Date(new Date().getTime() - 1 * 60 * 1000).toISOString();
     var clickedCalId = PropertiesService.getUserProperties().getProperty('clickedCalId');
-    var event = Calendar.Events.list(CalendarApp.getCalendarById(clickedCalId).getId(), {
-      fields: 'items(id,summary,status)',
+    var clickedCalendar = CalendarApp.getCalendarById(clickedCalId);
+    var event = Calendar.Events.list(clickedCalendar.getId(), {
       maxResults: 1,
       updatedMin: today,
       orderBy: 'updated'
     }).items[0];
-    var clickedCalendar = CalendarApp.getCalendarById(clickedCalId);
 
     // If there aren't any update
     if (event === null || event === undefined) return;
+    if (event.status === 'cancelled') {
+      clickedCalendar.getEventSeriesById(event.recurringEventId).deleteEventSeries();
+      PropertiesService.getUserProperties().setProperty('clickedCalId', '');
+      return;
+    }
 
     var userEvent = clickedCalendar.getEventById(event.id);
     var diffTime = userEvent.getEndTime() - userEvent.getStartTime();
@@ -367,6 +376,7 @@ function onEventUpdate(e) {
 
     PropertiesService.getUserProperties().setProperty('clickedCalId', '');
   } catch (e) {
+    Logger.log("onEventUpdate");
     Logger.log(e);
   }
 }
@@ -432,6 +442,7 @@ function onCalendarEventOpen(e) {
 
     return card;
   } catch (e) {
+    Logger.log("onCalendarEventOpen");
     Logger.log(e);
   }
 }
@@ -491,6 +502,7 @@ function addSpecialEvent(event) {
       .setNotification(notification)
       .build();
   } catch (e) {
+    Logger.log("addSpecialEvent");
     Logger.log(e);
   }
 }
